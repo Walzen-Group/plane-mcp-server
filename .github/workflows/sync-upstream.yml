@@ -1,0 +1,47 @@
+name: Sync with upstream
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+env:
+  UPSTREAM_REPO: https://github.com/makeplane/plane-mcp-server.git
+  UPSTREAM_BRANCH: main
+  TARGET_BRANCH: main
+
+jobs:
+  sync:
+    name: Merge upstream changes
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          # Use a PAT here instead of GITHUB_TOKEN if you want the resulting
+          # push to trigger the docker-publish workflow (GITHUB_TOKEN pushes
+          # do not trigger other workflows).
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream "${UPSTREAM_REPO}"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Merge upstream
+        run: |
+          git merge --no-edit "upstream/${UPSTREAM_BRANCH}"
+
+      - name: Push changes
+        run: |
+          git push origin "${TARGET_BRANCH}"
