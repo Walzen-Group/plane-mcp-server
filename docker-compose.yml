@@ -1,0 +1,96 @@
+services:
+  plane-mcp-server:
+    # Build from source, or comment `build` and uncomment `image` to use the
+    # published image from your GHCR registry.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: ghcr.io/walzen-group/plane-mcp-server:latest
+    container_name: plane-mcp-server
+    restart: unless-stopped
+    command: ["http"]
+    ports:
+      - "8211:8211"
+    environment:
+      # Point the server at your self-hosted Plane instance.
+      PLANE_BASE_URL: "https://plane.walzen.org/api"
+
+      # =====================================================================
+      # MODE A — Authentik OIDC for Claude.ai *web* connectors (multi-user)
+      # =====================================================================
+      # Use this when adding the server as a custom connector in Claude.ai web
+      # chat. Web connectors are OAuth-2.1 + PKCE only (no static header field),
+      # so each user logs in through your org's Authentik IdP and then links
+      # their own Plane Personal Access Token (PAT) once via the provision page.
+      #
+      # IMPORTANT: the server MUST be reachable over PUBLIC HTTPS (behind a
+      # reverse proxy / ingress). OAuth redirects for web chat cannot use
+      # localhost. Set MCP_PUBLIC_BASE_URL to that public HTTPS origin.
+      #
+      # See docs/authentik-setup.md for the full Authentik + Claude.ai walkthrough.
+      #
+      # --- Authentik OIDC discovery ---
+      # Provide the full discovery URL, OR AUTHENTIK_BASE_URL + AUTHENTIK_APP_SLUG.
+      AUTHENTIK_CONFIG_URL: "https://auth.example.com/application/o/plane-mcp/.well-known/openid-configuration"
+      # AUTHENTIK_BASE_URL: "https://auth.example.com"
+      # AUTHENTIK_APP_SLUG: "plane-mcp"
+      AUTHENTIK_CLIENT_ID: "your-authentik-client-id"
+      AUTHENTIK_CLIENT_SECRET: "your-authentik-client-secret"
+      # Optional token audience; defaults to the client id (we verify the id_token).
+      # AUTHENTIK_AUDIENCE: "your-authentik-client-id"
+      #
+      # --- Connector / server URLs ---
+      # Public HTTPS base of THIS server, no trailing slash. Used to build the
+      # OAuth + provision redirect URIs and the first-run provision link.
+      MCP_PUBLIC_BASE_URL: "https://mcp.example.com"
+      # Secret used to derive a Fernet key for encrypting linked PATs (and signing
+      # provision session cookies) at rest. REQUIRED in production; if unset the
+      # server derives one from AUTHENTIK_CLIENT_SECRET and logs a warning.
+      MCP_PAT_ENCRYPTION_KEY: "change-me-to-a-long-random-secret"
+      # Optional: signing key for FastMCP-minted tokens. If unset, derived from
+      # the client secret automatically.
+      # MCP_JWT_SIGNING_KEY: "change-me-to-a-long-random-secret"
+      #
+      # --- Plane web app (for the per-user PAT deep-link on the provision page) ---
+      # If unset, derived from PLANE_BASE_URL by stripping a trailing /api.
+      PLANE_WEB_URL: "https://plane.example.com"
+      # Default workspace slug offered on the provision page (each user may
+      # override it with their own workspace).
+      PLANE_WORKSPACE_SLUG: "your-workspace-slug"
+
+      # =====================================================================
+      # MODE B — Plane-Cloud OAuth / PAT header auth (Desktop, Code, Cursor, VS Code)
+      # =====================================================================
+      # Leave the Authentik vars above UNSET to fall back to this mode. These are
+      # only consulted when Authentik is not configured. For PAT (header-auth)
+      # usage via /http/api-key/mcp the values below are never actually used, so
+      # placeholders are fine. For real Plane-Cloud OAuth, register an application
+      # in your Plane instance and set real values + a public base URL.
+      # PLANE_OAUTH_PROVIDER_CLIENT_ID: "unused-placeholder"
+      # PLANE_OAUTH_PROVIDER_CLIENT_SECRET: "unused-placeholder"
+      # PLANE_OAUTH_PROVIDER_BASE_URL: "http://localhost:8211"
+
+      # --- Shared ---
+      # Redis-backed storage for OAuth/PKCE state AND the per-user PAT mappings.
+      # Strongly recommended in Authentik mode so linked PATs survive a restart;
+      # falls back to in-memory (lost on restart) if unset.
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: plane-mcp-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

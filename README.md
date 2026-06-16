@@ -109,6 +109,30 @@ Connect to the hosted Plane MCP server using OAuth authentication via Server-Sen
 **Note**: OAuth authentication will be handled automatically when connecting to the remote server. This transport is deprecated in favor of the HTTP transport.
 
 
+## Self-hosted Plane + Claude.ai web connector (Authentik OIDC)
+
+Want to add **your self-hosted Plane** as a custom connector in **Claude.ai web chat**, for
+**multiple users**? Web connectors are OAuth-2.1 + PKCE only (there's no header/API-key field), and
+self-hosted Plane CE can't issue OAuth tokens — so this server can authenticate users through your
+org's **Authentik** IdP and map each user to their own Plane **Personal Access Token (PAT)**. Every
+action is attributed to the real user, in their chosen workspace.
+
+- **When to use it**: the Claude.ai **web** connector. (For **Claude Desktop / Code / Cursor / VS
+  Code**, you don't need OAuth at all — use the PAT/header path in section 3 against your instance.)
+- **How users connect**: add `https://<your-host>/http/mcp` as a custom connector → log in via
+  Authentik → link a Plane PAT once at `https://<your-host>/http/provision` → done.
+- **Key env vars**: `AUTHENTIK_CONFIG_URL`, `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_CLIENT_SECRET`,
+  `MCP_PUBLIC_BASE_URL` (public HTTPS), `MCP_PAT_ENCRYPTION_KEY`, `PLANE_BASE_URL`, `PLANE_WEB_URL`,
+  `PLANE_WORKSPACE_SLUG`, plus Redis. The server must sit behind public HTTPS.
+
+PATs are stored **Fernet-encrypted** (Redis), the Authentik token is **never** forwarded to Plane,
+and the per-user PAT-linking page runs its own CSRF-protected Authentik session login.
+
+👉 **Full walkthrough (Authentik provider + Application, redirect URIs, compose, and the Claude.ai
+steps): [docs/authentik-setup.md](docs/authentik-setup.md).** A ready-to-edit `docker-compose.yml`
+(Mode A = Authentik, Mode B = PAT/Plane-Cloud) ships in the repo root.
+
+
 ## Configuration
 
 ### Authentication
