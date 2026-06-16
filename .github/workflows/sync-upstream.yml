@@ -1,5 +1,15 @@
 name: Sync with upstream
 
+# Merges the latest makeplane/plane-mcp-server `main` into this fork's `main`,
+# keeping our commits (GHCR build + Authentik OIDC connector) on top, then pushes.
+#
+# If the merge hits a conflict the job fails. Resolve locally:
+#   git fetch upstream main && git merge upstream/main
+#   # fix conflicts, git add -A && git commit
+#   git push origin main
+# See MAINTENANCE.md §3. On failure this workflow can also ping a Claude routine
+# (MAINTENANCE.md §3.3) to attempt the resolution and open a PR.
+
 on:
   schedule:
     # Every Monday at 06:00 UTC
@@ -45,3 +55,20 @@ jobs:
       - name: Push changes
         run: |
           git push origin "${TARGET_BRANCH}"
+
+      - name: Notify Claude routine on failure (optional)
+        # Fires the Claude routine's webhook so it can attempt the merge-conflict
+        # resolution automatically and open a PR against main. No-op until the
+        # CLAUDE_ROUTINE_WEBHOOK repo secret is set. See MAINTENANCE.md §3.3.
+        if: failure() && env.CLAUDE_ROUTINE_WEBHOOK != ''
+        env:
+          CLAUDE_ROUTINE_WEBHOOK: ${{ secrets.CLAUDE_ROUTINE_WEBHOOK }}
+        run: |
+          curl -sS -X POST "$CLAUDE_ROUTINE_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc \
+              --arg repo "${{ github.repository }}" \
+              --arg branch "${TARGET_BRANCH}" \
+              --arg upstream "${UPSTREAM_BRANCH}" \
+              --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{event:"sync_upstream_failed", repo:$repo, branch:$branch, upstream_branch:$upstream, run_url:$run_url}')"
