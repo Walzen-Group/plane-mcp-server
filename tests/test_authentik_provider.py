@@ -185,7 +185,8 @@ class TestProviderConstruction:
     def test_default_scopes(self):
         with _patched_discovery():
             provider = self._build()
-        assert provider._authentik_scopes == ["openid", "email", "profile"]
+        # offline_access is required for Authentik (2024.2+) to issue a refresh token.
+        assert provider._authentik_scopes == ["openid", "email", "profile", "offline_access"]
 
     def test_missing_client_secret_raises(self):
         with _patched_discovery():

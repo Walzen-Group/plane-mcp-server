@@ -148,7 +148,10 @@ class AuthentikOIDCProvider(OIDCProxy):
                 this to ``base_url`` (which carries ``/http``).
             audience: Token audience. Ignored when ``verify_id_token`` is on (the
                 verifier audience defaults to ``client_id``); accepted for parity.
-            required_scopes: OIDC scopes (default ``["openid", "email", "profile"]``).
+            required_scopes: OIDC scopes (default
+                ``["openid", "email", "profile", "offline_access"]``). ``offline_access``
+                is required for Authentik (2024.2+) to issue a refresh token; without it
+                the connection dies when the access token expires and cannot be renewed.
             allowed_client_redirect_uris: Allowed MCP-client redirect patterns
                 (default: localhost / editor schemes / ``https://claude.ai/*``).
             client_storage: Storage backend for OAuth state (shared token store).
@@ -162,7 +165,7 @@ class AuthentikOIDCProvider(OIDCProxy):
         if not client_secret:
             raise ValueError("client_secret is required - set via parameter or AUTHENTIK_CLIENT_SECRET")
 
-        self._authentik_scopes = required_scopes or ["openid", "email", "profile"]
+        self._authentik_scopes = required_scopes or ["openid", "email", "profile", "offline_access"]
         self._authentik_audience = audience
 
         super().__init__(
